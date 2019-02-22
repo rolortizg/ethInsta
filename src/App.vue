@@ -83,23 +83,58 @@ export default {
     /* used to catch chosen image &
      * convert it to ArrayBuffer.
      */
-    captureFile(file) {
-     
+      captureFile(file) {
+      const reader = new FileReader();
+      if (typeof file !== 'undefined') {
+        reader.readAsArrayBuffer(file.target.files[0]);
+        reader.onloadend = async () => {
+          this.buffer = await this.convertToBuffer(reader.result);
+        };
+      } else this.buffer = '';
     },
     /**
      * converts ArrayBuffer to
      * Buffer for IPFS upload.
      */
-    async convertToBuffer(reader) {
-      
+     async convertToBuffer(reader) {
+      return Buffer.from(reader);
     },
     /**
      * submits buffered image & text to IPFS
      * and retrieves the hashes, then store
      * it in the Contract via sendHash().
      */
+    /**
+     * submits buffered image & text to IPFS
+     * and retrieves the hashes, then store
+     * it in the Contract via sendHash().
+     */
     onSubmit() {
-      
+      alert('Uploading on IPFS...');
+      this.$root.loading = true;
+      let imgHash;
+      ipfs.add(this.buffer)
+        .then((hashedImg) => {
+          imgHash = hashedImg[0].hash;
+          console.log("imgHash: " + imgHash); 
+          return this.convertToBuffer(this.caption);
+        }).then(bufferDesc => ipfs.add(bufferDesc)
+          .then(hashedText => hashedText[0].hash)).then((textHash) => {
+          this.$root.contract.methods
+            .sendHash(imgHash, textHash)
+            .send({ from: this.$root.currentAccount },
+              (error, transactionHash) => {
+                if (typeof transactionHash !== 'undefined') {
+                  alert('Storing on Ethereum...');
+                  this.$root.contract.once('NewPost',
+                    { from: this.$root.currentAccount },
+                    () => {
+                      this.$root.getPosts();
+                      alert('Operation Finished! Refetching...');
+                    });
+                } else this.$root.loading = false;
+              });
+        });
     },
     /**
      * validates if image & captions
